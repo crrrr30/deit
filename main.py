@@ -23,9 +23,7 @@ from losses import DistillationLoss
 from samplers import RASampler
 from augment import new_data_aug_generator
 
-import models
-from models import deit_tiny_patch4_32
-import models_v2
+from models import gMLPVision
 
 import utils
 
@@ -165,6 +163,8 @@ def get_args_parser():
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
+    parser.add_argument('--data-parallel', action='store_false', dest='data_parallel')
+    parser.set_defaults(data_parallel=True)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
@@ -258,7 +258,7 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     print(f"Creating model: {args.model}")
-    model = deit_tiny_patch4_32()
+    model = gMLPVision(image_size=32, patch_size=4, num_classes=args.nb_classes, dim=512, depth=8, heads=8)
 
                     
     if args.finetune:
@@ -320,7 +320,6 @@ def main(args):
             print('no patch embed')
             
     model.to(device)
-    model = torch.nn.DataParallel(model)
 
     model_ema = None
     if args.model_ema:
@@ -332,8 +331,9 @@ def main(args):
             resume='')
 
     model_without_ddp = model
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+    args.distributed = True
+    if True:        # args.distributed
+        model = torch.nn.DataParallel(model)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
